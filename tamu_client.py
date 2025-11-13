@@ -49,12 +49,15 @@ class TAMUClient:
             logger.error(f"Error fetching models: {e}")
             raise
     
-    def upload_file(self, file_path: str, purpose: str = "fine-tune") -> Dict:
+    def upload_file(self, file_path: str = None, file_bytes: bytes = None, 
+                    filename: str = None, purpose: str = "fine-tune") -> Dict:
         """
         Upload a file to TAMU API.
         
         Args:
-            file_path: Path to the file to upload
+            file_path: Path to the file to upload (if uploading from disk)
+            file_bytes: File bytes (if uploading from memory)
+            filename: Filename to use (required if using file_bytes)
             purpose: Purpose of the file upload
             
         Returns:
@@ -67,18 +70,31 @@ class TAMUClient:
                 "Authorization": f"Bearer {self.api_key}",
             }
             
-            with open(file_path, "rb") as f:
+            if file_path:
+                with open(file_path, "rb") as f:
+                    files = {
+                        "file": f,
+                        "purpose": (None, purpose),
+                    }
+                    response = requests.post(url, headers=headers, files=files)
+                    response.raise_for_status()
+                    data = response.json()
+                    logger.info(f"Successfully uploaded file: {file_path}")
+                    return data
+            elif file_bytes and filename:
                 files = {
-                    "file": f,
+                    "file": (filename, file_bytes),
                     "purpose": (None, purpose),
                 }
                 response = requests.post(url, headers=headers, files=files)
                 response.raise_for_status()
                 data = response.json()
-                logger.info(f"Successfully uploaded file: {file_path}")
+                logger.info(f"Successfully uploaded file: {filename}")
                 return data
+            else:
+                raise ValueError("Must provide either file_path or (file_bytes and filename)")
         except Exception as e:
-            logger.error(f"Error uploading file {file_path}: {e}")
+            logger.error(f"Error uploading file: {e}")
             raise
     
     def find_file(self, file_name: str) -> Dict:
@@ -126,6 +142,40 @@ class TAMUClient:
             return data
         except Exception as e:
             logger.error(f"Error creating knowledge base {name}: {e}")
+            raise
+    
+    def add_file_to_knowledge_base(self, kb_name: str, file_id: str) -> Dict:
+        """
+        Add a file to a knowledge base.
+        
+        Args:
+            kb_name: Name of the knowledge base
+            file_id: ID of the file to add
+            
+        Returns:
+            Response data
+        """
+        try:
+            # Get KB list to find the KB ID
+            kb_list = self.list_knowledge_bases()
+            kb_id = None
+            for kb in kb_list:
+                if kb.get("name") == kb_name:
+                    kb_id = kb.get("id")
+                    break
+            
+            if not kb_id:
+                raise ValueError(f"Knowledge base '{kb_name}' not found")
+            
+            url = f"{self.api_base}/api/v1/knowledge/{kb_id}/files"
+            payload = {"file_id": file_id}
+            response = requests.post(url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Added file {file_id} to knowledge base {kb_name}")
+            return data
+        except Exception as e:
+            logger.error(f"Error adding file to knowledge base: {e}")
             raise
     
     def list_knowledge_bases(self) -> List[Dict]:
@@ -280,4 +330,27 @@ class TAMUClient:
             )
         except Exception as e:
             logger.error(f"Error in chat_with_kb_file for {file_name}: {e}")
+            raise
+    
+    def get_file_content(self, kb_name: str, file_name: str) -> str:
+        """
+        Get the text content of a file from knowledge base.
+        
+        Args:
+            kb_name: Knowledge base name
+            file_name: File name in the knowledge base
+            
+        Returns:
+            File content as text
+        """
+        try:
+            return self.chat_with_kb_file(
+                kb_name=kb_name,
+                file_name=file_name,
+                base_system_prompt="You are a document reader. Extract and return ONLY the text content of the document without any additional commentary or formatting.",
+                base_user_prompt="Please provide the complete text content of this document exactly as it appears.",
+                temperature=0.0
+            )
+        except Exception as e:
+            logger.error(f"Error getting file content for {file_name}: {e}")
             raise

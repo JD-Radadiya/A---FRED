@@ -26,18 +26,29 @@ def setup_logging(log_dir: str = "logs") -> None:
         f"app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     )
     
-    # Configure logging
+    # Remove any existing handlers to avoid duplicates
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    # Configure logging with INFO level to capture more details
     logging.basicConfig(
-        level=logging.ERROR,
+        level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_filename),
+            logging.FileHandler(log_filename, mode='a'),
             logging.StreamHandler()
-        ]
+        ],
+        force=True
     )
+    
+    # Set specific loggers to appropriate levels
+    logging.getLogger('streamlit').setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('requests').setLevel(logging.WARNING)
     
     logger = logging.getLogger(__name__)
     logger.info(f"Logging initialized. Log file: {log_filename}")
+    logger.info(f"Application started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def create_word_document(content: str, filename: str) -> str:
