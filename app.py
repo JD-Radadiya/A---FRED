@@ -116,14 +116,25 @@ def render_sidebar():
         )
         
         if st.button("💾 Save API Keys"):
-            if tamu_key and elevenlabs_key:
-                st.session_state.tamu_api_key = tamu_key
-                st.session_state.elevenlabs_api_key = elevenlabs_key
-                st.session_state.api_keys_set = True
-                st.success("✅ API keys saved!")
-                logger.info("API keys configured")
+            if not tamu_key:
+                st.error("❌ Please provide your TAMU AI API key (the ElevenLabs key is optional)")
             else:
-                st.error("❌ Please provide both API keys")
+                # Save required TAMU key
+                st.session_state.tamu_api_key = tamu_key
+                st.session_state.api_keys_set = True
+
+                # Handle optional ElevenLabs key
+                if elevenlabs_key:
+                    st.session_state.elevenlabs_api_key = elevenlabs_key
+                    st.session_state.elevenlabs_configured = True
+                    st.success("✅ TAMU AI key saved! ElevenLabs key saved, audio features enabled.")
+                    logger.info("TAMU + ElevenLabs API keys configured")
+                else:
+                    st.session_state.elevenlabs_api_key = ""
+                    st.session_state.elevenlabs_configured = False
+                    st.success("✅ TAMU AI key saved!")
+                    st.info("You can add an ElevenLabs API key later to enable audio features.")
+                    logger.info("TAMU API key configured; ElevenLabs key not set")
         
         st.divider()
         
@@ -131,62 +142,68 @@ def render_sidebar():
         st.subheader("🎤 Voice Selection")
         
         if st.session_state.api_keys_set:
-            voice_option = st.radio(
-                "Voice Option",
-                ["Use Default Voice", "Clone My Voice"],
-                index=0 if st.session_state.use_default_voice else 1,
-                help="Choose between pre-made voices or clone your own"
-            )
-            
-            if voice_option == "Use Default Voice":
-                st.session_state.use_default_voice = True
-                st.session_state.selected_default_voice = st.selectbox(
-                    "Select Default Voice",
-                    list(ElevenLabsClient.DEFAULT_VOICES.keys()),
-                    index=list(ElevenLabsClient.DEFAULT_VOICES.keys()).index(st.session_state.selected_default_voice),
-                    help="Choose from pre-made ElevenLabs voices"
-                )
-                st.info(f"✓ Using default voice: {st.session_state.selected_default_voice}")
+            if not st.session_state.elevenlabs_api_key:
+                st.info("Add an ElevenLabs API key above to enable voice selection and audio generation.")
             else:
-                st.session_state.use_default_voice = False
-                voice_name = st.text_input(
-                    "Voice Name",
-                    value="My Cloned Voice",
-                    help="Name for your cloned voice"
+                voice_option = st.radio(
+                    "Voice Option",
+                    ["Use Default Voice", "Clone My Voice"],
+                    index=0 if st.session_state.use_default_voice else 1,
+                    help="Choose between pre-made voices or clone your own"
                 )
                 
-                voice_files = st.file_uploader(
-                    "Upload Voice Samples",
-                    type=["mp3", "wav", "m4a"],
-                    accept_multiple_files=True,
-                    help="Upload 1-3 audio samples (each 30s-5min) for best results"
-                )
-                
-                if st.button("🎙️ Clone Voice"):
-                    if voice_files:
-                        try:
-                            with st.spinner("Cloning voice..."):
-                                elevenlabs_client = ElevenLabsClient(st.session_state.elevenlabs_api_key)
-                                voice_bytes = [f.read() for f in voice_files]
-                                voice_id = elevenlabs_client.clone_voice(
-                                    name=voice_name,
-                                    voice_files=voice_bytes,
-                                    description=f"Cloned voice created on {datetime.now().strftime('%Y-%m-%d')}"
-                                )
-                                st.session_state.voice_id = voice_id
-                                st.session_state.voice_cloned = True
-                                st.success(f"✅ Voice cloned successfully! ID: {voice_id[:8]}...")
-                                logger.info(f"Voice cloned: {voice_id}")
-                        except Exception as e:
-                            st.error(f"❌ Error cloning voice: {str(e)}")
-                            logger.error(f"Voice cloning error: {traceback.format_exc()}")
-                    else:
-                        st.warning("⚠️ Please upload at least one voice sample")
-                
-                if st.session_state.voice_cloned:
-                    st.info(f"✓ Voice ready: {voice_name}")
+                if voice_option == "Use Default Voice":
+                    st.session_state.use_default_voice = True
+                    st.session_state.selected_default_voice = st.selectbox(
+                        "Select Default Voice",
+                        list(ElevenLabsClient.DEFAULT_VOICES.keys()),
+                        index=list(ElevenLabsClient.DEFAULT_VOICES.keys()).index(
+                            st.session_state.selected_default_voice
+                        ),
+                        help="Choose from pre-made ElevenLabs voices"
+                    )
+                    st.info(f"✓ Using default voice: {st.session_state.selected_default_voice}")
+                else:
+                    st.session_state.use_default_voice = False
+                    voice_name = st.text_input(
+                        "Voice Name",
+                        value="My Cloned Voice",
+                        help="Name for your cloned voice"
+                    )
+                    
+                    voice_files = st.file_uploader(
+                        "Upload Voice Samples",
+                        type=["mp3", "wav", "m4a"],
+                        accept_multiple_files=True,
+                        help="Upload 1-3 audio samples (each 30s–5min) for best results"
+                    )
+                    
+                    if st.button("🎙️ Clone Voice"):
+                        if voice_files:
+                            try:
+                                with st.spinner("Cloning voice..."):
+                                    elevenlabs_client = ElevenLabsClient(st.session_state.elevenlabs_api_key)
+                                    voice_bytes = [f.read() for f in voice_files]
+                                    voice_id = elevenlabs_client.clone_voice(
+                                        name=voice_name,
+                                        voice_files=voice_bytes,
+                                        description=f"Cloned voice created on {datetime.now().strftime('%Y-%m-%d')}"
+                                    )
+                                    st.session_state.voice_id = voice_id
+                                    st.session_state.voice_cloned = True
+                                    st.success(f"✅ Voice cloned successfully! ID: {voice_id[:8]}...")
+                                    logger.info(f"Voice cloned: {voice_id}")
+                            except Exception as e:
+                                st.error(f"❌ Error cloning voice: {str(e)}")
+                                logger.error(f"Voice cloning error: {traceback.format_exc()}")
+                        else:
+                            st.warning("⚠️ Please upload at least one voice sample")
+                    
+                    if st.session_state.voice_cloned:
+                        st.info(f"✓ Voice ready: {voice_name}")
         else:
-            st.info("💡 Save API keys first to enable voice selection")
+            st.info("💡 Save your TAMU AI API key first to enable voice selection")
+
         
         st.divider()
         
@@ -204,8 +221,11 @@ def render_main_content():
     st.title("🎙️ A-FRED: Artificial Feedback, Recommendation, Evaluation and Diagnosis")
     st.markdown("Process files with AI and generate emotional audio responses")
     
-    if not st.session_state.api_keys_set:
-        st.warning("⚠️ Please configure your API keys in the sidebar to get started")
+    if not st.session_state.tamu_api_key:
+        st.warning(
+            "⚠️ Please configure your TAMU AI API key in the sidebar to get started. "
+            "The ElevenLabs key is optional and only needed for audio."
+        )
         return
     
     # Create tabs
@@ -614,6 +634,11 @@ def process_files_multi_kb(
 def generate_audio_for_response(response: str, file_name: str, emotion: str, audio_style: str = "Direct Response"):
     """Generate audio for a response with optional feedback styling."""
     try:
+        if not st.session_state.elevenlabs_api_key:
+            st.error("❌ ElevenLabs API key is not configured. Please add it in the sidebar to generate audio.")
+            logger.error("Audio generation requested but ElevenLabs API key is missing.")
+            return
+
         logger.info(f"Starting audio generation for {file_name} with emotion={emotion}, style={audio_style}")
         
         with st.spinner(f"Generating {audio_style.lower()} audio with {emotion} emotion..."):
@@ -770,26 +795,29 @@ def render_history_tab():
                 else:
                     st.error("❌ Document not found")
                 
-                # Generate audio
-                emotion = st.selectbox(
-                    "Emotion",
-                    ElevenLabsClient.SUPPORTED_EMOTIONS,
-                    key=f"history_emotion_{idx}_{entry['timestamp'].strftime('%Y%m%d_%H%M%S')}"
-                )
-                
-                audio_style = st.selectbox(
-                    "Audio Style",
-                    ["Direct Response", "Feedback Style"],
-                    key=f"history_style_{idx}_{entry['timestamp'].strftime('%Y%m%d_%H%M%S')}"
-                )
-                
-                if st.button("🎵 Generate Audio", key=f"history_audio_{idx}"):
-                    generate_audio_for_response(
-                        entry["response"],
-                        entry["file_name"],
-                        emotion,
-                        audio_style,
+                # Generate audio (optional)
+                if not st.session_state.elevenlabs_api_key:
+                    st.info("Add an ElevenLabs API key in the sidebar to enable audio generation.")
+                else:
+                    emotion = st.selectbox(
+                        "Emotion",
+                        ElevenLabsClient.SUPPORTED_EMOTIONS,
+                        key=f"history_emotion_{idx}_{entry['timestamp'].strftime('%Y%m%d_%H%M%S')}"
                     )
+                    
+                    audio_style = st.selectbox(
+                        "Audio Style",
+                        ["Direct Response", "Feedback Style"],
+                        key=f"history_style_{idx}_{entry['timestamp'].strftime('%Y%m%d_%H%M%S')}"
+                    )
+                    
+                    if st.button("🎵 Generate Audio", key=f"history_audio_{idx}"):
+                        generate_audio_for_response(
+                            entry["response"],
+                            entry["file_name"],
+                            emotion,
+                            audio_style,
+                        )
             
             st.divider()
             st.markdown("**Response:**")
