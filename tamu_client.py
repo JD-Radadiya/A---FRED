@@ -167,7 +167,7 @@ class TAMUClient:
             if not kb_id:
                 raise ValueError(f"Knowledge base '{kb_name}' not found")
             
-            url = f"{self.api_base}/api/v1/knowledge/{kb_id}/files"
+            url = f"{self.api_base}/api/v1/knowledge/{kb_id}/file/add"
             payload = {"file_id": file_id}
             response = requests.post(url, headers=self.headers, json=payload)
             response.raise_for_status()
